@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 require 'config.php';
 
+if($_SESSION['user']['role'] !== 'admin'){
+    header("Location:index.php");
+    exit;
+}
+
 $uploadDir = realpath(__DIR__ . DIRECTORY_SEPARATOR . 'uploads') . DIRECTORY_SEPARATOR;
 
 // Validasi parameter

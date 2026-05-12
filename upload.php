@@ -48,7 +48,8 @@ $allowedTypes = [
     'image/gif',
     'application/pdf',
     'text/plain',
-    'application/zip'
+    'application/zip', // 🔥 harus ada koma
+    'video/mp4'
 ];
 
 if (!in_array($mimeType, $allowedTypes, true)) {
@@ -76,12 +77,22 @@ if (file_exists($targetPath)) {
     $targetPath = $uploadDir . $sanitizedFileName;
 }
 
-// Pindahkan file
 if (move_uploaded_file($file['tmp_name'], $targetPath)) {
 
-    // Simpan ke database
-    $stmt = $conn->prepare("INSERT INTO files (name, size) VALUES (?, ?)");
-    $stmt->bind_param("si", $sanitizedFileName, $file['size']);
+    $userId = $_SESSION['user']['id'];
+
+    $stmt = $conn->prepare("
+    INSERT INTO files (name, size, user_id)
+    VALUES (?, ?, ?)
+    ");
+
+    $stmt->bind_param(
+        "sii",
+        $sanitizedFileName,
+        $file['size'],
+        $userId
+    );
+
     $stmt->execute();
 
     header('Location: index.php?status=upload_success');

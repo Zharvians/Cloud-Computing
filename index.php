@@ -1,18 +1,56 @@
 <?php
+
 require 'config.php';
+
+if(!isset($_SESSION['user'])){
+    header("Location:login.php");
+    exit;
+}
+
+$user = $_SESSION['user'];
+$status = $_GET['status'] ?? '';
+
 $uploadDir = "uploads/";
 $files = [];
 
-$result = $conn->query("SELECT * FROM files ORDER BY uploaded_at DESC");
+if($user['role'] === 'admin'){
+
+    $result = $conn->query("
+        SELECT files.*, users.username
+        FROM files
+        JOIN users
+        ON files.user_id = users.id
+        ORDER BY uploaded_at DESC
+    ");
+
+}else{
+
+    $stmt = $conn->prepare("
+        SELECT * FROM files
+        WHERE user_id=?
+        ORDER BY uploaded_at DESC
+    ");
+
+    $stmt->bind_param("i",$user['id']);
+    $stmt->execute();
+
+    $result = $stmt->get_result();
+}
 
 $files = [];
 
 while ($row = $result->fetch_assoc()) {
-    $files[] = [
+     $files[] = [
         'name' => $row['name'],
         'size' => $row['size'],
-        'modified' => strtotime($row['uploaded_at'])
+        'modified' => strtotime($row['uploaded_at']),
+        'username' => $row['username'] ?? 'Unknown'
     ];
+}
+
+function isImage($name) {
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    return in_array($ext, ['jpg','jpeg','png','gif']);
 }
 
 function formatFileSize(int $bytes): string {
@@ -173,6 +211,29 @@ button:hover {
     font-size: 12px;
     margin-right: 8px;
 }
+    
+    .preview {
+    width: 100%;
+    aspect-ratio: 1/1; /* 🔥 bikin kotak 1:1 */
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* 🔥 biar ga gepeng */
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.preview img:hover {
+    transform: scale(1.05);
+}
 
 .download {color:#60a5fa;}
 .delete {color:#f87171;}
@@ -199,17 +260,42 @@ button:hover {
     <div class="main">
 
         <div class="topbar">
-            <h1>Dashboard</h1>
-            <div>Total: <?= count($files) ?> file</div>
+
+    <h1>lunar Storage by Muhammad Ade Ramadhani</h1>
+
+    <div style="display:flex;gap:15px;align-items:center;">
+
+        <div>
+            Total: <?= count($files) ?> file
         </div>
 
-        <?php if ($_GET['status'] ?? '' === 'upload_success'): ?>
-            <div class="success">Upload berhasil</div>
-        <?php elseif ($_GET['status'] ?? '' === 'delete_success'): ?>
-            <div class="success">File dihapus</div>
-        <?php elseif ($_GET['status'] ?? '' === 'error'): ?>
-            <div class="error">Terjadi error</div>
-        <?php endif; ?>
+        <div>
+            <?= htmlspecialchars($user['username']) ?>
+            (<?= $user['role'] ?>)
+        </div>
+
+        <a href="logout.php"
+           style="
+           color:white;
+           text-decoration:none;
+           background:#ef4444;
+           padding:8px 12px;
+           border-radius:8px;
+           ">
+           Logout
+        </a>
+
+    </div>
+
+</div>
+
+        <?php if ($status === 'upload_success'): ?>
+    <div class="success">Upload berhasil</div>
+<?php elseif ($status === 'delete_success'): ?>
+    <div class="success">File dihapus</div>
+<?php elseif ($status === 'error'): ?>
+    <div class="error">Terjadi error</div>
+<?php endif; ?>
 
         <!-- Upload -->
         <div class="card">
@@ -223,16 +309,38 @@ button:hover {
         <div class="grid">
             <?php foreach ($files as $file): ?>
             <div class="file">
-                <div class="file-icon"><?= fileIcon($file['name']) ?></div>
+                <div class="preview">
+    <?php if (isImage($file['name'])): ?>
+        <img src="uploads/<?= htmlspecialchars($file['name']) ?>"
+             onclick="openModal(this.src)">
+    <?php else: ?>
+        <div class="file-icon"><?= fileIcon($file['name']) ?></div>
+    <?php endif; ?>
+</div>
                 <div class="file-name"><?= htmlspecialchars($file['name']) ?></div>
                 <div class="file-meta"><?= formatFileSize($file['size']) ?></div>
                 <div class="file-meta"><?= date("d M Y", $file['modified']) ?></div>
+                
+                <?php if($user['role'] === 'admin'): ?>
+
+                <div class="file-meta">
+                    Upload by: <?= htmlspecialchars($file['username']) ?>
+                </div>
+
+                <?php endif; ?>
 
                 <div class="actions">
                     <a class="download" href="download.php?file=<?= urlencode($file['name']) ?>">Download</a>
+                    <?php if($user['role'] === 'admin'): ?>
+
                     <a class="delete"
-                       href="delete.php?file=<?= urlencode($file['name']) ?>"
-                       onclick="return confirm('Hapus file ini?')">Delete</a>
+                    href="delete.php?file=<?= urlencode($file['name']) ?>"
+                    onclick="return confirm('Hapus?')">
+                    Delete
+                    </a>
+
+                    <?php endif; ?>
+                  
                 </div>
             </div>
             <?php endforeach; ?>
@@ -241,6 +349,44 @@ button:hover {
     </div>
 
 </div>
+    
+    <!-- Modal -->
+<div id="imgModal" style="
+    display:none;
+    position:fixed;
+    top:0;left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.8);
+    justify-content:center;
+    align-items:center;
+    z-index:999;
+">
+    <img id="modalImg" style="
+        max-width:90%;
+        max-height:90%;
+        border-radius:10px;
+    ">
+</div>
+    
+    <script>
+function openModal(src) {
+    const modal = document.getElementById("imgModal");
+    const img = document.getElementById("modalImg");
+
+    img.src = src;
+    modal.style.display = "flex";
+}
+
+document.getElementById("imgModal").onclick = function() {
+    this.style.display = "none";
+}
+       
+if (window.location.search.includes("status=")) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+}
+</script>
+</script>
 
 </body>
 </html>
