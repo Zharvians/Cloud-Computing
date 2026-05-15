@@ -1,42 +1,126 @@
 <?php
+
 declare(strict_types=1);
 
 require 'config.php';
 
-if($_SESSION['user']['role'] !== 'admin'){
+if(
+    !isset($_SESSION['user']) ||
+    $_SESSION['user']['role'] !== 'admin'
+){
     header("Location:index.php");
     exit;
 }
 
-$uploadDir = realpath(__DIR__ . DIRECTORY_SEPARATOR . 'uploads') . DIRECTORY_SEPARATOR;
+/* ========================= */
+/* FOLDER */
+/* ========================= */
 
-// Validasi parameter
-if (empty($_GET['file'])) {
-    header('Location: index.php?status=error');
+$uploadDir = __DIR__ . '/uploads/';
+$trashDir  = __DIR__ . '/trash/';
+
+if(!is_dir($trashDir)){
+    mkdir($trashDir, 0777, true);
+}
+
+/* ========================= */
+/* VALIDASI */
+/* ========================= */
+
+if(empty($_GET['id'])){
+    header("Location:index.php?status=error");
     exit;
 }
 
-// Ambil & amankan nama file
-$fileName = basename((string)$_GET['file']);
-$filePath = realpath($uploadDir . $fileName);
+$id = (int) $_GET['id'];
 
-// Validasi file
-if ($filePath === false || strpos($filePath, $uploadDir) !== 0 || !is_file($filePath)) {
-    header('Location: index.php?status=error');
+/* ========================= */
+/* AMBIL FILE */
+/* ========================= */
+
+$stmt = $conn->prepare("
+    SELECT *
+    FROM files
+    WHERE id = ?
+    LIMIT 1
+");
+
+$stmt->bind_param("i", $id);
+$stmt->execute();
+
+$result = $stmt->get_result();
+
+if($result->num_rows <= 0){
+    header("Location:index.php?status=error");
     exit;
 }
 
-// Hapus file fisik
-if (unlink($filePath)) {
+$file = $result->fetch_assoc();
 
-    // 🔥 Hapus juga dari database
-    $stmt = $conn->prepare("DELETE FROM files WHERE name = ?");
-    $stmt->bind_param("s", $fileName);
-    $stmt->execute();
+$fileName = $file['name'];
 
-    header('Location: index.php?status=delete_success');
+$sourcePath = $uploadDir . $fileName;
+
+/* cek file */
+
+if(!file_exists($sourcePath)){
+    header("Location:index.php?status=error");
     exit;
 }
 
-header('Location: index.php?status=error');
+/* ========================= */
+/* NAMA BARU TRASH */
+/* ========================= */
+
+$newFileName =
+time() . "_" . $fileName;
+
+$trashPath =
+$trashDir . $newFileName;
+
+if(!file_exists($sourcePath)){
+    // file sudah hilang tapi data masih ada
+    $update = $conn->prepare("
+        UPDATE files
+        SET is_deleted = 1
+        WHERE id = ?
+    ");
+    $update->bind_param("i", $id);
+    $update->execute();
+
+    header("Location:index.php?status=missing_file");
+    exit;
+}
+
+/* ========================= */
+/* PINDAH KE TRASH */
+/* ========================= */
+
+if(rename($sourcePath, $trashPath)){
+
+    $update = $conn->prepare("
+        UPDATE files
+        SET
+            is_deleted = 1,
+            trash_name = ?
+        WHERE id = ?
+    ");
+
+    $update->bind_param(
+        "si",
+        $newFileName,
+        $id
+    );
+
+    $update->execute();
+
+    header("Location:index.php?status=delete_success");
+    exit;
+}
+
+/* ========================= */
+/* ERROR */
+/* ========================= */
+
+header("Location:index.php?status=error");
 exit;

@@ -43,13 +43,41 @@ if ($finfo) {
 
 // Whitelist file yang diizinkan
 $allowedTypes = [
+
+    // IMAGE
     'image/jpeg',
     'image/png',
     'image/gif',
+    'image/webp',
+
+    // PDF
     'application/pdf',
+
+    // WORD
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+
+    // EXCEL
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+
+    // POWERPOINT
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+
+    // CSV
+    'text/csv',
+
+    // TXT
     'text/plain',
-    'application/zip', // 🔥 harus ada koma
-    'video/mp4'
+
+    // ZIP
+    'application/zip',
+    'application/x-rar-compressed',
+
+    // VIDEO
+    'video/mp4',
+    'video/webm'
 ];
 
 if (!in_array($mimeType, $allowedTypes, true)) {
@@ -81,16 +109,24 @@ if (move_uploaded_file($file['tmp_name'], $targetPath)) {
 
     $userId = $_SESSION['user']['id'];
 
+	$folder_id = (int)($_POST['folder_id'] ?? 0);
+
     $stmt = $conn->prepare("
-    INSERT INTO files (name, size, user_id)
-    VALUES (?, ?, ?)
+    INSERT INTO files (
+        name,
+        size,
+        user_id,
+        folder_id
+    )
+    VALUES (?, ?, ?, ?)
     ");
 
     $stmt->bind_param(
-        "sii",
+        "siii",
         $sanitizedFileName,
         $file['size'],
-        $userId
+        $userId,
+        $folder_id
     );
 
     $stmt->execute();
