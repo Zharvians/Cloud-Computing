@@ -2,6 +2,13 @@
 
 require 'config.php';
 
+if(!isset($_SESSION['user'])){
+    header("Location: login.php");
+    exit;
+}
+
+$user = $_SESSION['user'];
+
 if(empty($_GET['file'])){
     header("Location: trash.php");
     exit;
@@ -27,6 +34,19 @@ if($result->num_rows <= 0){
 }
 
 $file = $result->fetch_assoc();
+
+/* ========================= */
+/* VALIDASI AKSES */
+/* ========================= */
+
+if(
+    $user['role'] !== 'admin'
+    &&
+    $file['user_id'] != $user['id']
+){
+    header("Location: trash.php");
+    exit;
+}
 
 $trashPath  = "trash/" . $file['trash_name'];
 $uploadPath = "uploads/" . $file['name'];

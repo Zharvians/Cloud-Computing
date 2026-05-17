@@ -5,28 +5,112 @@ ini_set('display_errors', 1);
 
 require 'config.php';
 
-if(
-    !isset($_SESSION['user']) ||
-    $_SESSION['user']['role'] !== 'admin'
-){
+if(!isset($_SESSION['user'])){
     die("Akses ditolak");
 }
 
-$result = $conn->query("
-    SELECT requests.*,
-    users.username
-    FROM requests
-    JOIN users
-    ON requests.user_id = users.id
-    ORDER BY created_at DESC
-");
+$user = $_SESSION['user'];
 
+$role   = $user['role'];
+$userId = $user['id'];
+
+$tab    = $_GET['tab'] ?? 'notifications';
+$filter = $_GET['filter'] ?? 'all';
+
+$today = date('Y-m-d');
+
+/* =========================
+   NOTIFICATIONS
+========================= */
+
+$notifSQL = "
+SELECT 
+    notifications.*,
+    users.username AS sender_name
+FROM notifications
+LEFT JOIN users 
+    ON notifications.sender_id = users.id
+WHERE (
+    notifications.target_role = 'all'
+    OR notifications.target_role = ?
+    OR notifications.target_user_id = ?
+)
+AND notifications.deleted_by_receiver = 0
+";
+
+$params = [$role, $userId];
+$types  = "si";
+
+/* FILTER */
+
+if($filter === 'unread'){
+    $notifSQL .= " AND notifications.is_read = 0";
+}
+
+if($filter === 'today'){
+    $notifSQL .= " AND DATE(notifications.created_at) = ?";
+    $params[] = $today;
+    $types .= "s";
+}
+
+$notifSQL .= " ORDER BY notifications.created_at DESC";
+
+$notifStmt = $conn->prepare($notifSQL);
+$notifStmt->bind_param($types, ...$params);
+$notifStmt->execute();
+
+$notifResult = $notifStmt->get_result();
+
+/* =========================
+   SENT HISTORY (ADMIN)
+========================= */
+
+$sentResult = null;
+
+if($role === 'admin'){
+
+    $sentStmt = $conn->prepare("
+        SELECT *
+        FROM notifications
+        WHERE sender_id = ?
+        AND deleted_by_sender = 0
+        ORDER BY created_at DESC
+    ");
+
+    $sentStmt->bind_param("i", $userId);
+    $sentStmt->execute();
+
+    $sentResult =
+    $sentStmt->get_result();
+}
+
+
+/* =========================
+   REQUESTS (ADMIN ONLY)
+========================= */
+
+$requestsResult = null;
+
+if($role === 'admin'){
+
+    $requestsResult = $conn->query("
+        SELECT 
+            requests.*,
+            users.username
+        FROM requests
+        JOIN users 
+            ON requests.user_id = users.id
+        ORDER BY requests.created_at DESC
+    ");
+}
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-<title>Mail Admin</title>
+<meta charset="UTF-8">
+<title>Mail Center</title>
+
 <style>
 
 *{
@@ -58,8 +142,6 @@ body{
     #020617 100%);
 }
 
-/* Stars */
-
 body::before{
     content:"";
     position:fixed;
@@ -75,8 +157,6 @@ body::before{
     pointer-events:none;
 }
 
-/* Title */
-
 h1{
     font-size:38px;
     margin-bottom:30px;
@@ -91,8 +171,6 @@ h1{
     -webkit-background-clip:text;
     -webkit-text-fill-color:transparent;
 }
-
-/* Back button */
 
 .back-btn{
     display:inline-block;
@@ -126,7 +204,12 @@ h1{
     0 10px 25px rgba(59,130,246,0.25);
 }
 
-/* Card */
+.top-menu{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:30px;
+}
 
 .card{
     background:rgba(255,255,255,0.06);
@@ -168,8 +251,6 @@ small{
     opacity:0.7;
 }
 
-/* Buttons */
-
 .action-btn{
     display:inline-block;
 
@@ -180,8 +261,6 @@ small{
     text-decoration:none;
     color:white;
 
-    margin-right:10px;
-
     transition:0.25s;
 }
 
@@ -189,7 +268,16 @@ small{
     transform:translateY(-2px);
 }
 
-.approve{
+.blue{
+    background:
+    linear-gradient(
+        135deg,
+        #2563eb,
+        #3b82f6
+    );
+}
+
+.green{
     background:
     linear-gradient(
         135deg,
@@ -198,7 +286,7 @@ small{
     );
 }
 
-.reject{
+.red{
     background:
     linear-gradient(
         135deg,
@@ -207,7 +295,15 @@ small{
     );
 }
 
-/* Scrollbar */
+.badge{
+    display:inline-block;
+    padding:6px 12px;
+    border-radius:999px;
+    font-size:13px;
+    margin-top:10px;
+
+    background:rgba(255,255,255,0.08);
+}
 
 ::-webkit-scrollbar{
     width:10px;
@@ -222,60 +318,554 @@ small{
     border-radius:20px;
 }
 
+.empty{
+    opacity:0.7;
+    padding:20px;
+}
+
+/* ========================= */
+/* LAYOUT */
+/* ========================= */
+
+.layout{
+    display:flex;
+    min-height:100vh;
+}
+
+/* ========================= */
+/* SIDEBAR */
+/* ========================= */
+
+/* ========================= */
+/* SIDEBAR */
+/* ========================= */
+
+.sidebar{
+    width:280px;
+
+    position:fixed;
+    top:0;
+    left:0;
+    bottom:0;
+
+    padding:30px 22px;
+
+    background:
+    linear-gradient(
+        180deg,
+        rgba(15,23,42,0.95) 0%,
+        rgba(17,24,39,0.92) 45%,
+        rgba(2,6,23,0.96) 100%
+    );
+
+    backdrop-filter:blur(24px);
+
+    border-right:
+    1px solid rgba(255,255,255,0.08);
+
+    box-shadow:
+    0 0 40px rgba(0,0,0,0.35),
+    0 0 25px rgba(59,130,246,0.08);
+
+    display:flex;
+    flex-direction:column;
+
+    z-index:100;
+
+    overflow:hidden;
+}
+
+/* glow effect */
+
+.sidebar::before{
+    content:"";
+
+    position:absolute;
+    inset:0;
+
+    background:
+    radial-gradient(
+        circle at top left,
+        rgba(59,130,246,0.18),
+        transparent 35%
+    ),
+
+    radial-gradient(
+        circle at bottom right,
+        rgba(168,85,247,0.15),
+        transparent 40%
+    );
+
+    pointer-events:none;
+}
+
+/* title */
+
+.sidebar h2{
+    position:relative;
+
+    font-size:30px;
+    font-weight:800;
+
+    margin-bottom:40px;
+
+    background:linear-gradient(
+        90deg,
+        #ffffff,
+        #7dd3fc,
+        #c084fc
+    );
+
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+
+    z-index:2;
+}
+
+/* menu wrapper */
+
+.menu{
+    position:relative;
+
+    flex:1;
+
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+
+    gap:14px;
+
+    z-index:2;
+}
+
+/* buttons */
+
+.menu a{
+    display:flex;
+    align-items:center;
+
+    gap:12px;
+
+    padding:15px 18px;
+
+    border-radius:18px;
+
+    text-decoration:none;
+    color:white;
+
+    background:rgba(255,255,255,0.05);
+
+    border:
+    1px solid rgba(255,255,255,0.06);
+
+    backdrop-filter:blur(18px);
+
+    transition:0.28s;
+}
+
+.menu a:hover{
+
+    transform:
+    translateX(6px);
+
+    background:
+    linear-gradient(
+        135deg,
+        rgba(59,130,246,0.22),
+        rgba(168,85,247,0.22)
+    );
+
+    box-shadow:
+    0 10px 30px rgba(59,130,246,0.18);
+}
+
+/* ========================= */
+/* CONTENT */
+/* ========================= */
+
+.main-content{
+    margin-left:280px;
+    width:calc(100% - 280px);
+
+    padding:35px;
+}
+/* ========================= */
+/* 📊 MINI STATS */
+/* ========================= */
+
+.mini-stats{
+    margin-top:20px;
+
+    padding:18px;
+
+    border-radius:22px;
+
+    background:rgba(255,255,255,0.08);
+
+    backdrop-filter:blur(20px);
+
+    border:1px solid rgba(255,255,255,0.08);
+
+    font-size:13px;
+
+    line-height:1.8;
+}
+
+/* ========================= */
+/* 🔻 SIDEBAR BOTTOM */
+/* ========================= */
+
+.sidebar-bottom{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.sidebar-bottom button{
+
+    width:100%;
+
+    padding:14px;
+
+    border:none;
+
+    border-radius:18px;
+
+    cursor:pointer;
+
+    color:inherit;
+
+    background:rgba(255,255,255,0.12);
+
+    backdrop-filter:blur(20px);
+
+    transition:0.3s;
+}
+
+.sidebar-bottom button:hover{
+
+    transform:translateY(-2px);
+
+    background:
+    linear-gradient(
+        135deg,
+        rgba(59,130,246,0.3),
+        rgba(147,51,234,0.3)
+    );
+}
+
+/* ========================= */
+/* 🌙 DARK MODE */
+/* ========================= */
+
+body.dark-mode .sidebar{
+    background:rgba(255,255,255,0.06);
+}
+
+body.dark-mode .menu a,
+body.dark-mode .mini-stats,
+body.dark-mode .sidebar-bottom button{
+    color:white;
+}
+    
 </style>
 </head>
 <body>
 
-<h1>📩 Request Mail</h1>
+<div class="layout">
+    
+<!-- Sidebar -->
+<div class="sidebar">
 
-<br>
+    <!-- ATAS -->
+    <div>
 
-<a href="index.php" class="back-btn">
-    ← Kembali ke Dashboard
-</a>
+        <h2>☁️ Lunar Cloud</h2>
 
-<br><br>
+    </div>
 
-<?php while($r = $result->fetch_assoc()): ?>
+        <!-- MENU -->
+    <div class="menu">
 
-<div class="card">
+        <?php if($user['role'] === 'admin'): ?>
+            <a href="manage_users.php">
+                👥 Manage Users
+            </a>
+        <?php endif; ?>
 
-    <h3>
-        <?= htmlspecialchars($r['username']) ?>
-    </h3>
-
-    <p>
-        <?= htmlspecialchars($r['message']) ?>
-    </p>
-
-    <br>
-
-    <small>
-        Status:
-        <?= $r['status'] ?>
-    </small>
-
-    <br><br>
-
-    <?php if($r['status'] === 'pending'): ?>
-
-        <a
-        class="action-btn approve"
-        href="approve_request.php?id=<?= $r['id'] ?>">
-            Approve
+        <a href="mail.php">
+            📩 Mail
         </a>
 
-        <a
-        class="action-btn reject"
-        href="reject_request.php?id=<?= $r['id'] ?>">
-            Reject
+        <a href="index.php">
+            📁 File Manager
+        </a>
+
+        <?php if($user['role'] !== 'viewer'): ?>
+
+            <a href="upload_page.php">
+                📤 Upload
+            </a>
+
+            <a href="trash.php">
+                🗑️ Trash
+            </a>
+
+        <?php endif; ?>
+
+    </div>
+
+</div>
+    
+<div class="main-content">
+
+<h1>📩 Mail Center</h1>
+
+<div class="top-menu">
+
+    <?php if($role === 'admin'): ?>
+
+        <a href="?tab=requests"
+           class="action-btn green">
+           🧾 Requests
         </a>
 
     <?php endif; ?>
 
+    <a href="?tab=notifications&filter=all"
+       class="action-btn blue">
+       🔔 All
+    </a>
+
+    <a href="?tab=notifications&filter=unread"
+       class="action-btn blue">
+       📩 Unread
+    </a>
+
+    <a href="?tab=notifications&filter=today"
+       class="action-btn blue">
+       📅 Today
+    </a>
+    
+    <a href="?tab=sent"
+       class="action-btn blue">
+       📤 Sent History
+    </a>
+
 </div>
 
-<?php endwhile; ?>
+<!-- REQUESTS -->
+
+<?php if($tab === 'requests' && $role === 'admin'): ?>
+
+    <?php if($requestsResult->num_rows > 0): ?>
+
+        <?php while($r = $requestsResult->fetch_assoc()): ?>
+
+            <div class="card">
+
+                <h3>
+                    <?= htmlspecialchars($r['username']) ?>
+                </h3>
+
+                <p>
+                    <?= htmlspecialchars($r['message']) ?>
+                </p>
+
+                <div class="badge">
+                    Status: <?= htmlspecialchars($r['status']) ?>
+                </div>
+
+                <?php if($r['status'] === 'pending'): ?>
+
+                    <br><br>
+
+                    <a class="action-btn green"
+                       href="approve_request.php?id=<?= $r['id'] ?>">
+                       ✅ Approve
+                    </a>
+
+                    <a class="action-btn red"
+                       href="reject_request.php?id=<?= $r['id'] ?>">
+                       ❌ Reject
+                    </a>
+
+                <?php endif; ?>
+
+            </div>
+
+        <?php endwhile; ?>
+
+    <?php else: ?>
+
+        <div class="card empty">
+            No requests found..
+        </div>
+
+    <?php endif; ?>
+
+<?php endif; ?>
+    
+<!-- SENT HISTORY -->
+
+<?php if($tab === 'sent' && $role === 'admin'): ?>
+
+   <form
+    method="POST"
+    action="delete_all_sent.php"
+    onsubmit="return confirm('Hapus semua history notif?')">
+
+        <label style="
+            display:flex;
+            align-items:center;
+            gap:8px;
+            margin-bottom:12px;
+            opacity:.85;
+        ">
+
+            <input
+            type="checkbox"
+            name="delete_receiver"
+            value="1">
+
+            Hapus untuk penerima juga
+
+        </label>
+
+        <button
+        class="action-btn red"
+        style="border:none;cursor:pointer;">
+
+            🗑 Delete All
+
+        </button>
+
+    </form>
+
+    <br><br>
+
+    <?php if($sentResult->num_rows > 0): ?>
+
+        <?php while($s = $sentResult->fetch_assoc()): ?>
+
+            <div class="card">
+
+                <h3>
+                    <?= htmlspecialchars($s['title']) ?>
+                </h3>
+
+                <p>
+                    <?= htmlspecialchars($s['message']) ?>
+                </p>
+
+                <br>
+
+                <small>
+                    <?= date('d M Y H:i', strtotime($s['created_at'])) ?>
+                </small>
+
+                <br><br>
+
+                <form
+                method="POST"
+                action="delete_sent.php"
+                onsubmit="return confirm('Hapus notif ini?')">
+
+                    <input
+                    type="hidden"
+                    name="id"
+                    value="<?= $s['id'] ?>">
+
+                    <label style="
+                        display:flex;
+                        align-items:center;
+                        gap:8px;
+                        margin-bottom:12px;
+                        opacity:.85;
+                    ">
+
+                        <input
+                        type="checkbox"
+                        name="delete_receiver"
+                        value="1">
+
+                        Hapus untuk penerima juga
+
+                    </label>
+
+                    <button
+                    class="action-btn red"
+                    style="border:none;cursor:pointer;">
+
+                        ❌ Delete
+
+                    </button>
+
+                </form>
+
+            </div>
+
+        <?php endwhile; ?>
+
+    <?php else: ?>
+
+        <div class="card empty">
+            No notification history.
+        </div>
+
+    <?php endif; ?>
+
+<?php endif; ?>
+
+
+<!-- NOTIFICATIONS -->
+
+<?php if($tab === 'notifications'): ?>
+
+    <?php if($notifResult->num_rows > 0): ?>
+
+        <?php while($r = $notifResult->fetch_assoc()): ?>
+
+            <div class="card">
+
+                <h3>
+                    <?= htmlspecialchars($r['sender_name'] ?? 'System') ?>
+                </h3>
+
+                <p>
+                    <?= htmlspecialchars($r['message']) ?>
+                </p>
+
+                <br>
+
+                <small>
+                    <?= date('d M Y H:i', strtotime($r['created_at'])) ?>
+                </small>
+                
+                <br><br>
+
+                <a href="delete_notification.php?id=<?= $r['id'] ?>"
+                   class="action-btn red"
+                   onclick="return confirm('Hapus notif ini?')">
+                   🗑 Delete
+                </a>
+
+            </div>
+
+        <?php endwhile; ?>
+
+    <?php else: ?>
+
+        <div class="card empty">
+            No notifications found.
+        </div>
+
+    <?php endif; ?>
+
+<?php endif; ?>
+    
+</div>
+</div>
 
 </body>
 </html>

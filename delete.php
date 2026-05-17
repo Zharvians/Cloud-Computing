@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 require 'config.php';
 
-if(
-    !isset($_SESSION['user']) ||
-    $_SESSION['user']['role'] !== 'admin'
-){
+if(!isset($_SESSION['user'])){
     header("Location:index.php");
     exit;
 }
+
+$user = $_SESSION['user'];
 
 /* ========================= */
 /* FOLDER */
@@ -56,6 +55,19 @@ if($result->num_rows <= 0){
 }
 
 $file = $result->fetch_assoc();
+
+/* ========================= */
+/* CEK AKSES */
+/* ========================= */
+
+if(
+    $user['role'] !== 'admin'
+    &&
+    $file['user_id'] != $user['id']
+){
+    header("Location:index.php?status=error");
+    exit;
+}
 
 $fileName = $file['name'];
 

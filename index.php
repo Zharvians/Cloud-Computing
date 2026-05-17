@@ -35,7 +35,7 @@ if($user['role'] === 'admin'){
 }elseif($user['role'] === 'viewer'){
 
     $result = $conn->query("
-        SELECT files.*, users.username
+        SELECT files.*, users.username, users.role AS uploader_role
         FROM files
         JOIN users
         ON files.user_id = users.id
@@ -75,8 +75,6 @@ if($user['role'] === 'admin'){
     $result = $stmt->get_result();
 }
 
-$files = [];
-
 while ($row = $result->fetch_assoc()) {
 
     $files[] = [
@@ -94,12 +92,134 @@ while ($row = $result->fetch_assoc()) {
 }
 
 /* ========================= */
-/* 📊 STORAGE STATS */
+/* 🔔 NOTIFICATION SYSTEM */
 /* ========================= */
+
+$notifQuery = $conn->prepare("
+    SELECT
+        notifications.*,
+        users.username AS sender_name
+    FROM notifications
+    JOIN users
+    ON notifications.sender_id = users.id
+
+    WHERE
+    (
+        target_role = 'all'
+        OR target_role = ?
+        OR target_user_id = ?
+    )
+    AND sender_id != ?
+
+    AND is_read = 0
+
+    ORDER BY created_at DESC
+    LIMIT 1
+");
+
+$notifQuery->bind_param(
+    "sii",
+    $user['role'],
+    $user['id'],
+    $user['id']
+);
+
+$notifQuery->execute();
+
+$latestNotif =
+$notifQuery
+->get_result()
+->fetch_assoc();
+
+if($latestNotif){
+
+    $readStmt = $conn->prepare("
+        UPDATE notifications
+        SET is_read = 1
+        WHERE id = ?
+    ");
+
+    $readStmt->bind_param(
+        "i",
+        $latestNotif['id']
+    );
+
+    $readStmt->execute();
+}
+
+/* ========================= */
+/* 📂 TOTAL FOLDER */
+/* ========================= */
+
+if($user['role'] === 'admin'){
+
+    $folderCountStmt = $conn->prepare("
+        SELECT COUNT(*) as total
+        FROM folders
+    ");
+
+}else{
+
+    $folderCountStmt = $conn->prepare("
+        SELECT COUNT(*) as total
+        FROM folders
+        WHERE user_id = ?
+    ");
+
+    $folderCountStmt->bind_param(
+        "i",
+        $user['id']
+    );
+}
+
+$folderCountStmt->execute();
+
+$totalFolders =
+$folderCountStmt
+->get_result()
+->fetch_assoc()['total'] ?? 0;
 
 $totalSize = 0;
 $totalImages = 0;
 $totalDocs = 0;
+
+/* ========================= */
+/* 💾 TOTAL STORAGE */
+/* ========================= */
+
+if($user['role'] === 'admin'){
+
+    $storageStmt = $conn->prepare("
+        SELECT COALESCE(SUM(size),0) as total
+        FROM files
+        WHERE is_deleted = 0
+    ");
+
+}else{
+
+    $storageStmt = $conn->prepare("
+        SELECT COALESCE(SUM(size),0) as total
+        FROM files
+        WHERE user_id = ?
+        AND is_deleted = 0
+    ");
+
+    $storageStmt->bind_param(
+        "i",
+        $user['id']
+    );
+}
+
+$storageStmt->execute();
+
+$totalSize =
+$storageStmt
+->get_result()
+->fetch_assoc()['total'] ?? 0;
+
+/* ========================= */
+/* 📊 STORAGE STATS */
+/* ========================= */
 
 foreach($files as $f){
 
@@ -127,38 +247,47 @@ function fileIcon($name) {
 
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
 
-    return match($ext) {
+    switch($ext){
 
-        'jpg','jpeg','png','gif','webp'
-            => '🖼️',
+        case 'jpg':
+        case 'jpeg':
+        case 'png':
+        case 'gif':
+        case 'webp':
+            return '🖼️';
 
-        'pdf'
-            => '📕',
+        case 'pdf':
+            return '📕';
 
-        'doc','docx'
-            => '📝',
+        case 'doc':
+        case 'docx':
+            return '📝';
 
-        'xls','xlsx'
-            => '📊',
+        case 'xls':
+        case 'xlsx':
+            return '📊';
 
-        'csv'
-            => '📈',
+        case 'csv':
+            return '📈';
 
-        'ppt','pptx'
-            => '📽️',
+        case 'ppt':
+        case 'pptx':
+            return '📽️';
 
-        'zip','rar'
-            => '📦',
+        case 'zip':
+        case 'rar':
+            return '📦';
 
-        'mp4','webm'
-            => '🎥',
+        case 'mp4':
+        case 'webm':
+            return '🎥';
 
-        'txt'
-            => '📄',
+        case 'txt':
+            return '📄';
 
-        default
-            => '📁'
-    };
+        default:
+            return '📁';
+    }
 }
 ?>
 
@@ -1521,6 +1650,132 @@ body:not(.dark-mode) .tab-btn{
         0 0 15px rgba(59,130,246,0.45)
     );
 }
+    
+#liveNotif{
+    position:fixed;
+    top:25px;
+    right:25px;
+    z-index:999999;
+}
+
+.live-card{
+    min-width:320px;
+    max-width:400px;
+
+    background:rgba(15,23,42,0.95);
+
+    color:white;
+
+    padding:18px;
+
+    border-radius:22px;
+
+    backdrop-filter:blur(25px);
+
+    border:1px solid rgba(255,255,255,0.08);
+
+    box-shadow:
+    0 10px 40px rgba(0,0,0,0.35);
+
+    animation:slideNotif 0.4s ease;
+    
+    pointer-events:auto;
+}
+
+.live-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+}
+
+.close-live{
+    cursor:pointer;
+    font-size:18px;
+    opacity:0.7;
+}
+
+.close-live:hover{
+    opacity:1;
+}
+
+@keyframes slideNotif{
+
+    from{
+        opacity:0;
+        transform:translateX(100px);
+    }
+
+    to{
+        opacity:1;
+        transform:translateX(0);
+    }
+}
+ 
+/* ========================= */
+/* 📢 NOTIFICATION MODAL FIX */
+/* ========================= */
+
+/* INPUT + TEXTAREA + SELECT */
+
+#notifModal input,
+#notifModal textarea,
+#notifModal select{
+    background:rgba(255,255,255,0.12);
+    color:inherit;
+
+    border:1px solid rgba(255,255,255,0.08);
+
+    backdrop-filter:blur(20px);
+
+    transition:0.3s;
+}
+
+/* OPTION DROPDOWN */
+
+#notifModal select option{
+    background:#0f172a;
+    color:white;
+}
+
+/* PLACEHOLDER */
+
+#notifModal input::placeholder,
+#notifModal textarea::placeholder{
+    color:rgba(255,255,255,0.65);
+}
+
+/* LIGHT MODE */
+
+body:not(.dark-mode) #notifModal input,
+body:not(.dark-mode) #notifModal textarea,
+body:not(.dark-mode) #notifModal select{
+    background:rgba(255,255,255,0.75);
+    color:#0f172a;
+}
+
+body:not(.dark-mode) #notifModal select option{
+    background:white;
+    color:#0f172a;
+}
+
+body:not(.dark-mode) #notifModal input::placeholder,
+body:not(.dark-mode) #notifModal textarea::placeholder{
+    color:rgba(15,23,42,0.5);
+}
+
+/* FOCUS EFFECT */
+
+#notifModal input:focus,
+#notifModal textarea:focus,
+#notifModal select:focus{
+    outline:none;
+
+    box-shadow:
+    0 0 25px rgba(59,130,246,0.25);
+
+    border-color:rgba(96,165,250,0.4);
+}
 
 </style>
 </head>
@@ -1544,6 +1799,8 @@ body:not(.dark-mode) .tab-btn{
 </div>
     
 <div id="toast"></div>
+    
+<div id="liveNotif"></div>
 
 <div class="wrapper">
 
@@ -1557,6 +1814,7 @@ body:not(.dark-mode) .tab-btn{
 
         <div class="mini-stats">
             <p>📁 <?= count($files) ?> Files</p>
+            <p>📁 <?= $totalFolders ?> Folder</p>
             <p>🖼️ <?= $totalImages ?> Images</p>
             <p>📄 <?= $totalDocs ?> Docs</p>
         </div>
@@ -1572,11 +1830,13 @@ body:not(.dark-mode) .tab-btn{
             </a>
         <?php endif; ?>
         
-        <?php if($user['role'] === 'admin'): ?>
             <a href="mail.php">
                 📩 Mail
             </a>
-        <?php endif; ?>
+        
+        	<a href="#">
+                📁 File Manager
+            </a>
 
         <?php if($user['role'] !== 'viewer'): ?>
             <a href="upload_page.php?folder=<?= $currentFolder ?>">
@@ -1644,6 +1904,14 @@ body:not(.dark-mode) .tab-btn{
                         💾 Largest Size
                     </option>
 
+                    <option value="file_first">
+                        📄 File First
+                    </option>
+
+                    <option value="folder_first">
+                        📂 Folder First
+                    </option>
+
                 </select>
 
                 <?php if($user['role'] === 'admin'): ?>
@@ -1661,10 +1929,6 @@ body:not(.dark-mode) .tab-btn{
             <h1>Lunar Cloud Storage by Zharvian</h1>
 
             <div class="top-actions">
-
-                <div>
-                    Total: <?= count($files) ?> file
-                </div>
 
                 <button class="menu-btn" onclick="openMenu()">
                     ☰
@@ -1689,13 +1953,35 @@ body:not(.dark-mode) .tab-btn{
         </div>
 
         <?php if ($status === 'upload_success'): ?>
+
             <script>
                 showToast("Upload berhasil");
             </script>
+
+        <?php elseif ($status === 'rename_success'): ?>
+
+            <script>
+                showToast("Rename berhasil");
+            </script>
+
         <?php elseif ($status === 'delete_success'): ?>
-            <div class="success">File dihapus</div>
+
+            <div class="success">
+                File dihapus
+            </div>
+        
+        <?php elseif ($status === 'notif_sent'): ?>
+
+            <script>
+            showToast("Notification berhasil dikirim");
+            </script>
+
         <?php elseif ($status === 'error'): ?>
-            <div class="error">Terjadi error</div>
+
+            <div class="error">
+                Terjadi error
+            </div>
+
         <?php endif; ?>
 
         <?php if($user['role'] !== 'viewer'): ?>
@@ -1705,6 +1991,11 @@ body:not(.dark-mode) .tab-btn{
                 <div class="stat-card">
                     <h3>📁 Total File</h3>
                     <p><?= count($files) ?></p>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>📂 Total Folder</h3>
+                    <p><?= $totalFolders ?></p>
                 </div>
 
                 <div class="stat-card">
@@ -1880,31 +2171,33 @@ $folders = $folderQuery->get_result();
     data-date="<?= strtotime($folder['created_at']) ?>"
     >
 
-    <a
-    href="index.php?folder=<?= $folder['id'] ?>"
-    style="text-decoration:none;color:inherit;display:block;">
+    <div
+    onclick="window.location='index.php?folder=<?= $folder['id'] ?>'"
+    style="cursor:pointer;">
 
-    <div class="preview">
+        <div class="preview">
 
-        <div class="file-preview-doc">
+            <div class="file-preview-doc">
 
-            <div class="doc-icon">
-                📂
-            </div>
+                <div class="doc-icon">
+                    📂
+                </div>
 
-            <div class="doc-ext">
-                FOLDER
+                <div class="doc-ext">
+                    FOLDER
+                </div>
+
             </div>
 
         </div>
 
-    </div>
-
     <div class="file-name">
         <?= htmlspecialchars($folder['name']) ?>
     </div>
+        
+</div>
 
-    <?php
+<?php
 
 $countStmt = $conn->prepare("
     SELECT COUNT(*) as total
@@ -1965,6 +2258,17 @@ $sizeStmt
 </div>
 
 <div class="actions">
+    
+    <a
+    class="download"
+    href="#"
+    onclick="openRenameModal(
+    'folder',
+    <?= $folder['id'] ?>,
+    '<?= htmlspecialchars($folder['name'], ENT_QUOTES) ?>'
+    )">
+        ✏️ Edit
+    </a>
 
     <a
     class="download"
@@ -2010,8 +2314,6 @@ $sizeStmt
 
 </div>
 
-    </a>
-
     </div>
 
 <?php endwhile; ?>
@@ -2020,11 +2322,9 @@ $sizeStmt
     
     <?php
 
-if(
-    !file_exists(
-        "uploads/" . $file['name']
-    )
-){
+$fullPath = "uploads/" . $file['name'];
+
+if(!file_exists($fullPath)){
     continue;
 }
 
@@ -2090,9 +2390,13 @@ data-uploader="<?= strtolower(htmlspecialchars($file['username'])) ?>"
         <?= htmlspecialchars($file['name']) ?>
     </div>
 
-    <div class="file-meta">
+   <div class="file-meta">
         👤
         <?= htmlspecialchars($file['username']) ?>
+
+        <?php if($user['role'] === 'admin'): ?>
+            (#<?= $file['user_id'] ?>)
+        <?php endif; ?>
     </div>
 
     <div class="file-meta">
@@ -2115,6 +2419,17 @@ data-uploader="<?= strtolower(htmlspecialchars($file['username'])) ?>"
     <?php endif; ?>
 
     <div class="actions">
+        
+        <a
+        class="download"
+        href="#"
+        onclick="openRenameModal(
+        'file',
+        <?= $file['id'] ?>,
+        '<?= htmlspecialchars($file['name'], ENT_QUOTES) ?>'
+        )">
+            ✏️ Edit
+        </a>
 
         <a
         class="download"
@@ -2132,22 +2447,29 @@ data-uploader="<?= strtolower(htmlspecialchars($file['username'])) ?>"
 
         </a>
 
-        <?php if($user['role'] === 'admin'): ?>
+        <?php if(
+            $user['role'] === 'admin'
+            || $file['user_id'] == $user['id']
+        ): ?>
+
+            <?php if($user['role'] === 'admin'): ?>
+
+                <a
+                class="download"
+                href="toggle_public.php?file=<?= urlencode($file['name']) ?>">
+
+                    <?= $file['is_public'] ? 'Hide' : 'Public' ?>
+
+                </a>
+
+            <?php endif; ?>
 
             <a
-            class="download"
-            href="toggle_public.php?file=<?= urlencode($file['name']) ?>">
+            class="delete"
+            href="delete.php?id=<?= $file['id'] ?>"
+            onclick="return confirm('Hapus file ini?')">
 
-                <?= $file['is_public'] ? 'Hide' : 'Public' ?>
-
-            </a>
-
-            <a
-                class="delete"
-                href="delete.php?id=<?= $file['id'] ?>"
-                onclick="return confirm('Hapus?')">
-
-                    Delete
+                Delete
 
             </a>
 
@@ -2206,6 +2528,18 @@ data-uploader="<?= strtolower(htmlspecialchars($file['username'])) ?>"
             <a href="request_access.php" class="drawer-link">
                 🚀 Request Upload Access
             </a>
+
+        <?php endif; ?>
+        
+        <?php if($user['role'] === 'admin'): ?>
+
+        <button
+        onclick="openNotifModal()"
+        class="drawer-link-btn">
+
+            📢 Send Notification
+
+        </button>
 
         <?php endif; ?>
 
@@ -2289,14 +2623,211 @@ data-uploader="<?= strtolower(htmlspecialchars($file['username'])) ?>"
 
 </div>
     
+<!-- ========================= -->
+<!-- ✏️ RENAME MODAL -->
+<!-- ========================= -->
+
+<div id="renameModal" class="img-modal">
+
+    <div class="card"
+    style="
+    width:90%;
+    max-width:420px;
+    position:relative;
+    ">
+
+        <span
+        class="close-modal"
+        onclick="closeRenameModal()"
+        style="
+        top:15px;
+        right:20px;
+        color:white;
+        ">
+            ✕
+        </span>
+
+        <h2 style="margin-bottom:20px;">
+            ✏️ Rename
+        </h2>
+
+        <form action="rename.php" method="POST">
+
+            <input type="hidden" name="type" id="renameType">
+            <input type="hidden" name="id" id="renameId">
+
+            <input
+            type="text"
+            name="new_name"
+            id="renameInput"
+            required
+
+            style="
+            width:100%;
+            padding:16px;
+            border:none;
+            outline:none;
+            border-radius:16px;
+            margin-bottom:20px;
+            background:rgba(255,255,255,0.12);
+            color:white;
+            ">
+
+            <button
+            type="submit"
+            style="
+            width:100%;
+            padding:15px;
+            border-radius:16px;
+            ">
+
+                💾 Save Rename
+
+            </button>
+
+        </form>
+
+    </div>
+
+</div>
+    
+<!-- ========================= -->
+<!-- 📢 NOTIFICATION MODAL -->
+<!-- ========================= -->
+
+<div id="notifModal" class="img-modal">
+
+    <div class="card"
+    style="
+    width:90%;
+    max-width:500px;
+    position:relative;
+    ">
+
+        <span
+        class="close-modal"
+        onclick="closeNotifModal()"
+        style="
+        top:15px;
+        right:20px;
+        color:white;
+        ">
+
+            ✕
+
+        </span>
+
+        <h2 style="margin-bottom:20px;">
+            📢 Send Notification
+        </h2>
+
+        <form action="send_notification.php" method="POST">
+
+            <input
+            type="text"
+            name="title"
+            placeholder="Notification title..."
+            required
+
+            style="
+            width:100%;
+            padding:15px;
+            border:none;
+            border-radius:15px;
+            margin-bottom:15px;
+            background:rgba(255,255,255,0.12);
+            color:white;
+            ">
+
+            <textarea
+            name="message"
+            placeholder="Type message..."
+            required
+
+            style="
+            width:100%;
+            height:140px;
+            padding:15px;
+            border:none;
+            border-radius:15px;
+            resize:none;
+            margin-bottom:15px;
+            background:rgba(255,255,255,0.12);
+            color:white;
+            "></textarea>
+
+            <select
+            name="target_role"
+
+            style="
+            width:100%;
+            padding:15px;
+            border:none;
+            border-radius:15px;
+            margin-bottom:20px;
+            background:rgba(255,255,255,0.12);
+            color:white;
+            ">
+
+                <option value="all">
+                    🌍 All
+                </option>
+
+                <option value="user">
+                    👤 User
+                </option>
+
+                <option value="viewer">
+                    👁 Viewer
+                </option>
+
+            </select>
+            
+            <input
+            type="number"
+            name="target_user_id"
+            placeholder="Specific User ID (optional)"
+
+            style="
+            width:100%;
+            padding:15px;
+            border:none;
+            border-radius:15px;
+            margin-bottom:20px;
+            background:rgba(255,255,255,0.12);
+            color:white;
+            ">
+
+            <button
+            type="submit"
+            style="
+            width:100%;
+            padding:15px;
+            border-radius:15px;
+            ">
+
+                🚀 Send Notification
+
+            </button>
+
+        </form>
+
+    </div>
+
+</div>
+    
 <script>
 window.addEventListener("load",()=>{
+
     document.getElementById("loadingScreen").style.display="none";
+
+    // default sorting
+    sortFiles();
+
 });
 
 const modal = document.getElementById("imgModal");
 const modalImg = document.getElementById("modalImg");
-const closeBtn = document.querySelector(".close-modal");
 
 function openModal(src) {
     console.log("clicked image:", src);
@@ -2479,6 +3010,78 @@ function filterFiles(type, btn){
 }
     
 /* ========================= */
+/* ✏️ RENAME MODAL */
+/* ========================= */
+
+function openRenameModal(type,id,name){
+
+    document
+    .getElementById("renameModal")
+    .classList.add("active");
+
+    document
+    .getElementById("renameType")
+    .value = type;
+
+    document
+    .getElementById("renameId")
+    .value = id;
+
+    document
+    .getElementById("renameInput")
+    .value = name;
+}
+
+function closeRenameModal(){
+
+    document
+    .getElementById("renameModal")
+    .classList.remove("active");
+}
+
+document
+.getElementById("renameModal")
+.addEventListener("click",(e)=>{
+
+    if(e.target.id === "renameModal"){
+
+        closeRenameModal();
+
+    }
+
+});
+    
+/* ========================= */
+/* Notif */
+/* ========================= */
+    
+function openNotifModal(){
+
+    document
+    .getElementById("notifModal")
+    .classList.add("active");
+}
+
+function closeNotifModal(){
+
+    document
+    .getElementById("notifModal")
+    .classList.remove("active");
+}
+
+document
+.getElementById("notifModal")
+.addEventListener("click",(e)=>{
+
+    if(e.target.id === "notifModal"){
+
+        closeNotifModal();
+
+    }
+
+});
+    
+/* ========================= */
 /* 🔃 SORT FILE */
 /* ========================= */
 
@@ -2501,9 +3104,40 @@ function sortFiles(){
         const bFolder =
         b.dataset.type === "folder";
 
-        // folder selalu di atas
-        if(aFolder && !bFolder) return -1;
-        if(!aFolder && bFolder) return 1;
+        /* ========================= */
+        /* 📂 FILE / FOLDER PRIORITY */
+        /* ========================= */
+
+        if(sortValue === "folder_first"){
+
+            if(aFolder && !bFolder) return -1;
+            if(!aFolder && bFolder) return 1;
+
+        }
+
+        if(sortValue === "file_first"){
+
+            if(!aFolder && bFolder) return -1;
+            if(aFolder && !bFolder) return 1;
+
+        }
+
+        /* default = folder belakang */
+
+        if(
+            sortValue !== "folder_first"
+            &&
+            sortValue !== "file_first"
+        ){
+
+            if(aFolder && !bFolder) return 1;
+            if(!aFolder && bFolder) return -1;
+
+        }
+
+        /* ========================= */
+        /* 🔃 NORMAL SORT */
+        /* ========================= */
 
         if(sortValue === "newest"){
             return b.dataset.date - a.dataset.date;
@@ -2529,6 +3163,8 @@ function sortFiles(){
             return b.dataset.size - a.dataset.size;
         }
 
+        return 0;
+
     });
 
     files.forEach(file=>{
@@ -2542,11 +3178,13 @@ function sortFiles(){
 
 function searchAll(){
 
+    const searchInput =
+    document.getElementById("searchInput");
+
+    if(!searchInput) return;
+
     const keyword =
-    document
-    .getElementById("searchInput")
-    .value
-    .toLowerCase();
+    searchInput.value.toLowerCase();
 
     const files =
     document.querySelectorAll("#fileGrid .file");
@@ -2554,10 +3192,10 @@ function searchAll(){
     files.forEach(file=>{
 
         const fileName =
-        file.dataset.name;
+        file.dataset.name || "";
 
         const uploader =
-        file.dataset.uploader;
+        file.dataset.uploader || "";
 
         if(
             fileName.includes(keyword) ||
@@ -2573,8 +3211,172 @@ function searchAll(){
 
     });
 
-}    
+}   
+    
+<?php if($latestNotif): ?>
 
+window.addEventListener("load",()=>{
+
+    const live =
+    document.getElementById("liveNotif");
+
+    if(!live) return;
+
+	live.innerHTML = `
+    
+    <div class="live-card" id="liveCard">
+
+        <div class="live-top">
+
+            <strong>
+                🔔 <?= htmlspecialchars($latestNotif['title']) ?>
+            </strong>
+
+            <span
+            class="close-live"
+            onclick="closeLiveNotif()">
+
+                ✕
+
+            </span>
+
+        </div>
+
+        <div>
+            <?= nl2br(htmlspecialchars($latestNotif['message'])) ?>
+        </div>
+
+    </div>
+    `;
+
+    setTimeout(()=>{
+
+        const card =
+        document.getElementById("liveCard");
+
+        if(card){
+
+            card.remove();
+
+        }
+
+    },5000);
+
+    playNotifSound();
+
+});
+
+function closeLiveNotif(){
+
+    const card =
+    document.getElementById("liveCard");
+
+    if(card){
+
+        card.remove();
+
+    }
+
+}
+
+function playNotifSound(){
+
+    const audio = new Audio(
+        "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3"
+    );
+
+    audio.volume = 0.4;
+
+    audio.play();
+
+}
+
+<?php endif; ?>
+setInterval(checkNotification, 3000);
+
+let notifTimeout = null;
+
+function checkNotification(){
+
+    fetch("check_notification.php")
+    .then(res => res.json())
+    .then(data => {
+
+        if(data.success){
+
+            showLiveNotification(
+                data.title,
+                data.message
+            );
+
+        }
+
+    });
+
+}
+
+function showLiveNotification(title, message){
+
+    const live =
+    document.getElementById("liveNotif");
+
+    live.innerHTML = "";
+
+    const card = document.createElement("div");
+
+    card.className = "live-card";
+    card.id = "liveCard";
+
+    card.innerHTML = `
+        <div class="live-top">
+
+            <strong>
+                🔔 ${title}
+            </strong>
+
+            <span class="close-live">
+                ✕
+            </span>
+
+        </div>
+
+        <div>
+            ${message}
+        </div>
+    `;
+
+    live.appendChild(card);
+
+    card
+    .querySelector(".close-live")
+    .addEventListener("click", closeLiveNotif);
+
+    playNotifSound();
+
+    if(notifTimeout){
+        clearTimeout(notifTimeout);
+    }
+
+    notifTimeout = setTimeout(() => {
+
+        closeLiveNotif();
+
+    }, 5000);
+}
+
+function closeLiveNotif(){
+
+    const card =
+    document.getElementById("liveCard");
+
+    if(card){
+        card.remove();
+    }
+
+    if(notifTimeout){
+        clearTimeout(notifTimeout);
+    }
+}
 </script>
 
 </body>

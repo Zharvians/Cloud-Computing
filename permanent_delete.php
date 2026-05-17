@@ -2,13 +2,12 @@
 
 require 'config.php';
 
-if(
-    !isset($_SESSION['user']) ||
-    $_SESSION['user']['role'] !== 'admin'
-){
+if(!isset($_SESSION['user'])){
     header("Location:index.php");
     exit;
 }
+
+$user = $_SESSION['user'];
 
 /* ========================= */
 /* VALIDASI ID */
@@ -43,6 +42,19 @@ if($result->num_rows <= 0){
 }
 
 $file = $result->fetch_assoc();
+
+/* ========================= */
+/* CEK AKSES */
+/* ========================= */
+
+if(
+    $user['role'] !== 'admin'
+    &&
+    $file['user_id'] != $user['id']
+){
+    header("Location:trash.php");
+    exit;
+}
 
 /* ========================= */
 /* HAPUS FILE FISIK */

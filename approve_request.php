@@ -50,4 +50,39 @@ $done = $conn->prepare("
 $done->bind_param("i",$id);
 $done->execute();
 
+/* =========================
+   KIRIM NOTIF KE USER
+========================= */
+
+$adminId = $_SESSION['user']['id'];
+$userId  = $request['user_id'];
+
+$message = "Selamat! Permintaan viewer kamu diterima. Role akun sekarang telah menjadi user.";
+
+$notif = $conn->prepare("
+    INSERT INTO notifications
+    (
+        sender_id,
+        target_user_id,
+        target_role,
+        message,
+        is_read,
+        created_at
+    )
+    VALUES
+    (
+        ?, ?, '', ?, 0, NOW()
+    )
+");
+
+$notif->bind_param(
+    "iis",
+    $adminId,
+    $userId,
+    $message
+);
+
+$notif->execute();
+
 header("Location:mail.php");
+exit;
