@@ -7,39 +7,60 @@ if(!isset($_SESSION['user'])){
 }
 
 $user = $_SESSION['user'];
-
-if($user['role'] !== 'admin'){
-    exit;
-}
+$userId = $user['id'];
 
 $deleteReceiver =
 isset($_POST['delete_receiver']);
 
-if($deleteReceiver){
+/* =========================
+   NOTIFICATIONS
+========================= */
 
-    $stmt = $conn->prepare("
-        UPDATE notifications
-        SET
-            deleted_by_sender = 1,
-            deleted_by_receiver = 1
-        WHERE sender_id = ?
-    ");
+if($user['role'] === 'admin'){
 
-}else{
+    if($deleteReceiver){
 
-    $stmt = $conn->prepare("
-        UPDATE notifications
-        SET deleted_by_sender = 1
-        WHERE sender_id = ?
-    ");
+        $stmt = $conn->prepare("
+            UPDATE notifications
+            SET
+                deleted_by_sender = 1,
+                deleted_by_receiver = 1
+            WHERE sender_id = ?
+        ");
+
+    }else{
+
+        $stmt = $conn->prepare("
+            UPDATE notifications
+            SET deleted_by_sender = 1
+            WHERE sender_id = ?
+        ");
+    }
+
+    $stmt->bind_param(
+        "i",
+        $userId
+    );
+
+    $stmt->execute();
 }
 
-$stmt->bind_param(
+/* =========================
+   SUPPORT MESSAGES
+========================= */
+
+$stmt2 = $conn->prepare("
+    UPDATE support_messages
+    SET deleted_by_sender = 1
+    WHERE sender_id = ?
+");
+
+$stmt2->bind_param(
     "i",
-    $user['id']
+    $userId
 );
 
-$stmt->execute();
+$stmt2->execute();
 
 header("Location: mail.php?tab=sent");
 exit;

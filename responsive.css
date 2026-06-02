@@ -1,0 +1,430 @@
+/* ========================================= */
+/* 📱 TABLET */
+/* ========================================= */
+
+@media screen and (max-width:1024px){
+
+    .wrapper{
+        grid-template-columns:220px 1fr;
+    }
+
+    .main{
+        padding:20px;
+    }
+
+    .grid{
+        grid-template-columns:
+        repeat(auto-fill,minmax(180px,1fr));
+    }
+
+}
+
+/* ========================================= */
+/* 📱 MOBILE */
+/* ========================================= */
+
+@media screen and (max-width:768px){
+
+    body{
+        overflow-x:hidden;
+    }
+
+    /* ========================= */
+    /* LAYOUT */
+    /* ========================= */
+
+    .wrapper{
+        display:flex;
+    }
+
+    .main{
+        flex:1;
+        padding:12px;
+        padding-bottom:90px;
+        transition:0.3s ease;
+    }
+
+    /* ========================= */
+    /* SIDEBAR */
+    /* ========================= */
+
+   .sidebar{
+        position:relative;
+
+        width:70px;
+        min-width:70px;
+        height:100vh;
+
+        overflow-y:auto;
+
+        transition:0.3s ease;
+
+        display:flex !important;
+
+        background:rgba(15,23,42,0.96);
+
+        backdrop-filter:blur(25px);
+    }
+    
+    .sidebar.expand + .main{
+            margin-left:170px;
+        }
+
+    body:not(.dark-mode) .sidebar{
+        background:rgba(255,255,255,0.95);
+    }
+
+    .sidebar h2{
+        font-size:22px;
+    }
+
+    .menu a{
+        padding:14px;
+        border-radius:16px;
+        font-size:14px;
+    }
+
+    .sidebar-bottom{
+        margin-top:20px;
+    }
+    
+.sidebar h2,
+.sidebar .mini-stats,
+.sidebar .menu a,
+.sidebar-bottom{
+    opacity:0;
+    visibility:hidden;
+    transition:0.2s;
+}
+
+.sidebar.expand h2,
+.sidebar.expand .mini-stats,
+.sidebar.expand .menu a,
+.sidebar.expand .sidebar-bottom{
+    opacity:1;
+    visibility:visible;
+}
+
+    /* ========================= */
+    /* TOPBAR */
+    /* ========================= */
+
+    .topbar{
+        position:sticky;
+        top:10px;
+
+        z-index:999;
+
+        flex-direction:column;
+
+        align-items:stretch;
+
+        gap:15px;
+
+        padding:16px;
+
+        border-radius:24px;
+    }
+
+    .topbar h1{
+        font-size:19px;
+        text-align:center;
+        line-height:1.4;
+    }
+
+    .top-actions{
+        justify-content:flex-end;
+    }
+
+    .menu-btn{
+        width:48px;
+        height:48px;
+        border-radius:16px;
+    }
+
+    /* ========================= */
+    /* FILTER */
+    /* ========================= */
+
+    .filter-bar{
+        display:grid;
+
+        grid-template-columns:1fr 1fr;
+
+        gap:10px;
+    }
+
+    .filter-bar input{
+        grid-column:span 2;
+    }
+
+    .filter-bar select,
+    .filter-bar input,
+    .filter-bar button{
+        width:100%;
+        min-width:0;
+    }
+
+    /* ========================= */
+    /* CARD */
+    /* ========================= */
+
+    .card{
+        padding:18px;
+        border-radius:22px;
+    }
+
+    .card h2{
+        font-size:18px;
+        line-height:1.5;
+    }
+
+    .card p{
+        font-size:13px;
+    }
+
+    /* ========================= */
+    /* STATS */
+    /* ========================= */
+
+    .stats-grid{
+        grid-template-columns:1fr 1fr;
+        gap:10px;
+    }
+
+    .stat-card{
+        padding:16px;
+        border-radius:20px;
+    }
+
+    .stat-card h3{
+        font-size:11px;
+    }
+
+    .stat-card p{
+        font-size:22px;
+    }
+
+    /* ========================= */
+    /* FILE TABS */
+    /* ========================= */
+
+    .file-tabs{
+        display:flex;
+
+        flex-wrap:nowrap;
+
+        overflow-x:auto;
+
+        gap:10px;
+
+        padding-bottom:5px;
+
+        scrollbar-width:none;
+    }
+
+    .file-tabs::-webkit-scrollbar{
+        display:none;
+    }
+
+    .tab-btn{
+        flex:none;
+
+        white-space:nowrap;
+
+        padding:11px 16px;
+
+        font-size:12px;
+
+        border-radius:15px;
+    }
+
+    /* ========================= */
+    /* GRID FILE */
+    /* ========================= */
+
+    .grid{
+        grid-template-columns:
+        repeat(3,minmax(0,1fr));
+
+        gap:10px;
+    }
+
+    .file{
+        padding:9px;
+
+        border-radius:18px;
+
+        min-width:0;
+    }
+
+    .preview{
+        aspect-ratio:1/1;
+
+        border-radius:14px;
+
+        margin-bottom:8px;
+    }
+
+    .file-preview-doc{
+        border-radius:14px;
+    }
+
+    .doc-icon{
+        font-size:30px;
+        margin-bottom:4px;
+    }
+
+    .doc-ext{
+        font-size:10px;
+    }
+
+    .doc-label{
+        display:none;
+    }
+
+    .file-name{
+        font-size:10px;
+
+        line-height:1.4;
+
+        overflow:hidden;
+
+        display:-webkit-box;
+
+        -webkit-line-clamp:2;
+
+        -webkit-box-orient:vertical;
+    }
+
+    .file-meta{
+        font-size:9px;
+
+        margin-top:3px;
+    }
+
+    .actions{
+        display:flex;
+
+        flex-wrap:wrap;
+
+        gap:5px;
+
+        margin-top:6px;
+    }
+
+    .actions a{
+        font-size:9px;
+
+        padding:4px 6px;
+
+        border-radius:8px;
+
+        margin-right:0;
+
+        background:rgba(255,255,255,0.08);
+    }
+
+    /* ========================= */
+    /* LIST VIEW FIX */
+    /* ========================= */
+
+    .list-view{
+        display:flex !important;
+        flex-direction:column;
+        gap:12px;
+    }
+
+    .list-view .file{
+        display:flex !important;
+
+        flex-direction:row !important;
+
+        align-items:center;
+
+        gap:12px;
+
+        width:100%;
+    }
+
+    .list-view .preview{
+        width:75px;
+        min-width:75px;
+        height:75px;
+
+        aspect-ratio:auto;
+
+        margin-bottom:0;
+    }
+
+    .list-view .file-name{
+        font-size:13px;
+
+        -webkit-line-clamp:1;
+    }
+
+    /* ========================= */
+    /* DRAWER */
+    /* ========================= */
+
+    .drawer{
+        width:100%;
+        right:-100%;
+    }
+
+    /* ========================= */
+    /* MODAL */
+    /* ========================= */
+
+    .img-modal{
+        padding:15px;
+    }
+
+    #modalImg{
+        max-width:100%;
+        max-height:82vh;
+    }
+
+    .close-modal{
+        top:15px;
+        right:18px;
+
+        font-size:28px;
+    }
+
+}
+
+/* ========================================= */
+/* 📱 EXTRA SMALL */
+/* ========================================= */
+
+@media screen and (max-width:480px){
+
+    .grid{
+        grid-template-columns:
+        repeat(3,minmax(0,1fr));
+
+        gap:8px;
+    }
+
+    .topbar h1{
+        font-size:17px;
+    }
+
+    .card h2{
+        font-size:17px;
+    }
+
+    .doc-icon{
+        font-size:25px;
+    }
+
+    .file-name{
+        font-size:9px;
+    }
+
+    .file-meta{
+        font-size:8px;
+    }
+
+}

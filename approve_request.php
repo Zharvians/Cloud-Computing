@@ -67,19 +67,21 @@ $notif = $conn->prepare("
         target_role,
         message,
         is_read,
-        created_at
+        created_at,
+        request_id
     )
     VALUES
     (
-        ?, ?, '', ?, 0, NOW()
+        ?, ?, '', ?, 0, NOW(), ?
     )
 ");
 
 $notif->bind_param(
-    "iis",
+    "iisi",
     $adminId,
     $userId,
-    $message
+    $message,
+    $id
 );
 
 $notif->execute();

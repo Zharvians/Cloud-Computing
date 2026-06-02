@@ -7,6 +7,10 @@ if($_SESSION['user']['role'] !== 'admin'){
     exit;
 }
 
+if($_SESSION['user']['id'] == $id){
+    $_SESSION['user']['role'] = $role;
+}
+
 $id = (int)($_GET['id'] ?? 0);
 
 $role = $_GET['role'] ?? '';

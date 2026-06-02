@@ -41,4 +41,39 @@ $stmt = $conn->prepare("
 $stmt->bind_param("is", $user['id'], $message);
 $stmt->execute();
 
+/* ========================= */
+/* 🔔 NOTIF KE ADMIN */
+/* ========================= */
+
+$notifTitle =
+"🚀 Access Request";
+
+$notifMessage =
+$user['username'] .
+" requested upload access.";
+
+$notif = $conn->prepare("
+    INSERT INTO notifications
+    (
+        sender_id,
+        title,
+        message,
+        target_role
+    )
+    VALUES (?,?,?,?)
+");
+
+$targetRole = "admin";
+
+$notif->bind_param(
+    "isss",
+    $user['id'],
+    $notifTitle,
+    $notifMessage,
+    $targetRole
+);
+
+$notif->execute();
+
 header("Location:index.php?status=request_sent");
+exit;
