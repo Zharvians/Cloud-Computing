@@ -2,6 +2,21 @@
 
 require 'config.php';
 
+
+/* ========================= */
+/* AUTO BACKUP MINGGUAN */
+/* ========================= */
+
+if(isset($_SESSION['user'])){
+
+    if($_SESSION['user']['role'] === 'admin'){
+
+        require_once 'auto_backup.php';
+
+    }
+
+}
+
 if(!isset($_SESSION['user'])){
     header("Location:login.php");
     exit;

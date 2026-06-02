@@ -204,5 +204,14 @@ file_put_contents(
     $sql
 );
 
-header("Location:index.php?status=backup_success");
-exit;
+if(
+    basename($_SERVER['SCRIPT_NAME'])
+    === 'backup_system.php'
+){
+
+    header(
+        "Location:index.php?status=backup_success"
+    );
+
+    exit;
+}
