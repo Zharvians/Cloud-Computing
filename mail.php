@@ -654,6 +654,10 @@ body.dark-mode .sidebar-bottom button{
             </a>
         <?php endif; ?>
 
+        <a href="backup_manager.php">
+            📦 Backup Manager
+        </a>
+
         <a href="mail.php">
             📩 Mail
         </a>

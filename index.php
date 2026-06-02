@@ -349,6 +349,15 @@ function fileIcon($name) {
             <a href="manage_users.php">
                 👥 Manage Users
             </a>
+
+            <a href="backup_system.php">
+                💾 Full Backup
+            </a>
+
+            <a href="backup_manager.php">
+                📦 Backup Manager
+            </a>
+            
         <?php endif; ?>
         
             <a href="mail.php">
@@ -490,6 +499,12 @@ function fileIcon($name) {
             <div class="success">
                 File dihapus
             </div>
+
+        <?php elseif ($status === 'backup_success'): ?>
+
+            <script>
+                showToast("Full Backup berhasil dibuat");
+            </script>
         
         <?php elseif ($status === 'notif_sent'): ?>
 

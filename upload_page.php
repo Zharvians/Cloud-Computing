@@ -808,6 +808,10 @@ button:hover{
             </a>
         <?php endif; ?>
 
+        <a href="backup_manager.php">
+            📦 Backup Manager
+        </a>
+
         <a href="mail.php">
             📩 Mail
         </a>

@@ -7,6 +7,18 @@ if($_SESSION['user']['role'] !== 'admin'){
     exit;
 }
 
+if(!isset($_SESSION['user'])){
+    header("Location: login.php");
+    exit;
+}
+
+$user = $_SESSION['user'];
+
+if($user['role'] === 'viewer'){
+    header("Location:index.php");
+    exit;
+}
+
 $result = $conn->query("
 SELECT id, username, password, role
 FROM users
@@ -540,8 +552,14 @@ tr:hover{
 
     <div class="menu">
 
-        <a href="manage_users.php">
-            👥 Manage Users
+        <?php if($user['role'] === 'admin'): ?>
+            <a href="manage_users.php">
+                👥 Manage Users
+            </a>
+        <?php endif; ?>
+
+        <a href="backup_manager.php">
+            📦 Backup Manager
         </a>
 
         <a href="mail.php">

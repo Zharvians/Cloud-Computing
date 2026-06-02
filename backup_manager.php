@@ -1,9 +1,11 @@
 <?php
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 require 'config.php';
+
+if($_SESSION['user']['role'] !== 'admin'){
+    header("Location:index.php");
+    exit;
+}
 
 if(!isset($_SESSION['user'])){
     header("Location: login.php");
@@ -17,76 +19,34 @@ if($user['role'] === 'viewer'){
     exit;
 }
 
-/* ========================= */
-/* AMBIL FILE SAMPAH */
-/* ========================= */
+$backupRoot = __DIR__ . "/backup";
 
-if($user['role'] === 'admin'){
+$backups = [];
 
-    $result = $conn->query("
-        SELECT files.*, users.username
-        FROM files
-        JOIN users
-        ON files.user_id = users.id
-        WHERE files.is_deleted = 1
-        ORDER BY files.uploaded_at DESC
-    ");
+if(is_dir($backupRoot)){
 
-}else{
+    foreach(scandir($backupRoot) as $folder){
 
-    $stmt = $conn->prepare("
-        SELECT files.*, users.username
-        FROM files
-        JOIN users
-        ON files.user_id = users.id
-        WHERE files.user_id = ?
-        AND files.is_deleted = 1
-        ORDER BY files.uploaded_at DESC
-    ");
+        if($folder == "." || $folder == ".."){
+            continue;
+        }
 
-    $stmt->bind_param("i", $user['id']);
-    $stmt->execute();
+        if(is_dir($backupRoot . "/" . $folder)){
+            $backups[] = $folder;
+        }
 
-    $result = $stmt->get_result();
-}
-
-function formatFileSize($bytes){
-
-    if($bytes >= 1048576){
-        return round($bytes / 1048576, 2)." MB";
     }
 
-    if($bytes >= 1024){
-        return round($bytes / 1024, 2)." KB";
-    }
-
-    return $bytes." B";
+    rsort($backups);
 }
-
-function isImage($name){
-
-    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-
-    return in_array($ext, [
-        'jpg',
-        'jpeg',
-        'png',
-        'gif',
-        'webp'
-    ]);
-}
-
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>Trash</title>
-
+<title>Backup Manager</title>
+<link rel="stylesheet" href="responsive.css">
 <style>
 
 *{
@@ -469,8 +429,8 @@ h1{
     background:
     linear-gradient(
         135deg,
-        #16a34a,
-        #22c55e
+        #a31616,
+        #c52222
     );
 }
 
@@ -510,151 +470,253 @@ h1{
     border-radius:20px;
 }
 
+.backup-card{
+    background:
+    linear-gradient(
+        145deg,
+        rgba(15,23,42,.95),
+        rgba(30,41,59,.95)
+    );
+
+    border:1px solid rgba(255,255,255,.08);
+
+    border-radius:28px;
+
+    padding:25px;
+
+    text-align:center;
+
+    transition:.35s;
+
+    backdrop-filter:blur(25px);
+
+    position:relative;
+
+    overflow:hidden;
+}
+
+.backup-card:hover{
+    transform:translateY(-8px);
+
+    box-shadow:
+    0 20px 45px rgba(59,130,246,.25);
+}
+
+.backup-icon{
+    font-size:70px;
+    margin-bottom:15px;
+}
+
+.backup-name{
+    font-size:18px;
+    font-weight:700;
+    margin-bottom:12px;
+}
+
+.backup-info{
+    color:#94a3b8;
+    margin-bottom:8px;
+    font-size:14px;
+}
+
+.backup-actions{
+    display:flex;
+    gap:10px;
+    margin-top:20px;
+}
+
+.download-btn,
+.restore-btn{
+    flex:1;
+    text-decoration:none;
+    color:white;
+    padding:12px;
+    border-radius:14px;
+    font-weight:600;
+}
+
+.download-btn{
+    background:
+    linear-gradient(
+        135deg,
+        #3b82f6,
+        #2563eb
+    );
+}
+
+.restore-btn{
+    background:
+    linear-gradient(
+        135deg,
+        #db0e0e,
+        #821409
+    );
+}
+
+.delete-btn{
+    display:block;
+
+    margin-top:12px;
+
+    text-decoration:none;
+
+    color:white;
+
+    padding:12px;
+
+    border-radius:14px;
+
+    background:
+    linear-gradient(
+        135deg,
+        #ef4444,
+        #dc2626
+    );
+}
+
+.empty-state{
+    text-align:center;
+    margin-top:100px;
+}
+
+.empty-icon{
+    font-size:100px;
+    margin-bottom:20px;
+}
+
 </style>
 
 </head>
 <body>
 
 <div class="layout">
-    
-<!-- Sidebar -->
-<div class="sidebar">
 
-    <div>
-        <h2>☁️ Lunar Cloud</h2>
-    </div>
+    <aside class="sidebar">
 
-    <div class="menu">
+        <h2>☁ Lunar Cloud</h2>
 
-        <?php if($user['role'] === 'admin'): ?>
-            <a href="manage_users.php">
-                👥 Manage Users
+            <div class="menu">
+
+            <?php if($user['role'] === 'admin'): ?>
+                <a href="manage_users.php">
+                    👥 Manage Users
+                </a>
+            <?php endif; ?>
+
+            <a href="backup_manager.php">
+                📦 Backup Manager
             </a>
-        <?php endif; ?>
 
-        <a href="backup_manager.php">
-            📦 Backup Manager
-        </a>
+            <a href="mail.php">
+                📩 Mail
+            </a>
 
-        <a href="mail.php">
-            📩 Mail
-        </a>
+            <a href="index.php">
+                📁 File Manager
+            </a>
 
-        <a href="index.php">
-            📁 File Manager
-        </a>
+            <a href="upload_page.php">
+                📤 Upload
+            </a>
 
-        <a href="upload_page.php">
-            📤 Upload
-        </a>
+            <a href="trash.php">
+                🗑️ Trash
+            </a> 
 
-        <a href="trash.php">
-            🗑️ Trash
-        </a>
+        </div>
 
-    </div>
+    </aside>
 
-</div>
+    <main class="main-content">
 
-<div class="main-content">
+        <h1>📦 Backup Manager</h1>
 
-<h1>🗑️ Trash Files</h1>
+        <?php if(count($backups)): ?>
 
-<div class="grid">
+        <div class="grid">
 
-<?php while($file = $result->fetch_assoc()): ?>
+            <?php foreach($backups as $backup):
 
-<?php
+                $path = $backupRoot . "/" . $backup;
 
-/* skip kalau file fisik hilang */
+                $size = 0;
 
-if(
-    empty($file['trash_name']) ||
-    !file_exists(__DIR__ . "/trash/" . $file['trash_name'])
-){
-    continue;
-}
+                $iterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($path)
+                );
 
-?>
+                foreach($iterator as $file){
+                    if($file->isFile()){
+                        $size += $file->getSize();
+                    }
+                }
 
-<div class="file">
+                $sizeFormatted =
+                    $size > 1048576
+                    ? round($size/1048576,2)." MB"
+                    : round($size/1024,2)." KB";
 
-    <div class="preview">
+            ?>
 
-        <?php if(isImage($file['name'])): ?>
+            <div class="backup-card">
 
-            <img
-				src="trash/<?= htmlspecialchars($file['trash_name']) ?>">
+                <div class="backup-icon">
+                    📦
+                </div>
+
+                <div class="backup-name">
+                    <?= htmlspecialchars($backup) ?>
+                </div>
+
+                <div class="backup-info">
+                    <span>💾 <?= $sizeFormatted ?></span>
+                </div>
+
+                <div class="backup-info">
+                    <span>
+                        🕒
+                        <?= date(
+                            "d M Y H:i",
+                            filemtime($path)
+                        ) ?>
+                    </span>
+                </div>
+
+                <div class="backup-actions">
+
+                    <a
+                    href="delete_backup.php?folder=<?= urlencode($backup) ?>"
+                    onclick="return confirm('Hapus backup ini?')"
+                    class="restore-btn">
+                    🗑 Hapus Backup
+                    </a>
+
+                    <a
+                    href="download_backup.php?folder=<?= urlencode($backup) ?>"
+                    class="download-btn">
+                    📥 Download ZIP
+                    </a>
+
+                </div>
+
+            </div>
+
+            <?php endforeach; ?>
+
+        </div>
 
         <?php else: ?>
 
-            <div class="doc-preview">
-                📄
+            <div class="empty-state">
+                <div class="empty-icon">📦</div>
+                <h2>Belum Ada Backup</h2>
+                <p>Backup yang dibuat akan muncul di sini.</p>
             </div>
 
         <?php endif; ?>
 
-    </div>
+    </main>
 
-    <div class="file-name">
-        <?= htmlspecialchars($file['name']) ?>
-    </div>
-
-    <div class="file-meta">
-        💾 <?= formatFileSize($file['size']) ?>
-    </div>
-
-    <div class="file-meta">
-        👤 <?= htmlspecialchars($file['username']) ?>
-    </div>
-
-    <div class="file-meta">
-        📅 <?= date("d M Y", strtotime($file['uploaded_at'])) ?>
-    </div>
-
-    <div class="actions">
-
-        <a
-            class="btn restore"
-            href="restore.php?file=<?= urlencode($file['trash_name']) ?>">
-
-                Restore
-
-        </a>
-
-        <?php if(
-            $user['role'] === 'admin'
-            || $file['user_id'] == $user['id']
-        ): ?>
-
-        <a
-        class="btn delete"
-        href="permanent_delete.php?id=<?= $file['id'] ?>"
-        onclick="return confirm('Hapus permanen?')">
-
-            Delete
-
-        </a>
-
-        <?php endif; ?>
-
-    </div>
-
-</div>
-
-<?php endwhile; ?>
-
-</div>
-
-<?php if(!$result || $result->num_rows <= 0): ?>
-
-<div class="empty">
-    There is no trash to clean up. 🗑️
-</div>
-
-<?php endif; ?>
-    
-</div>
 </div>
 
 </body>
